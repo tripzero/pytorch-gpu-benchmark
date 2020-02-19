@@ -25,7 +25,10 @@ MODEL_LIST = {
 }
 
 precisions = ["float", "half", 'double']
-device_name = str(torch.cuda.get_device_name(0))
+try:
+    device_name = str(torch.cuda.get_device_name(0))
+except:
+    device_name = ""
 # Training settings
 parser = argparse.ArgumentParser(description='PyTorch Benchmarking')
 parser.add_argument('--WARM_UP', '-w', type=int, default=5,
@@ -63,7 +66,7 @@ rand_loader = DataLoader(dataset=RandomDataset(args.BATCH_SIZE * (args.WARM_UP +
 def train(type='single'):
     """use fake image for training speed test"""
     target = torch.LongTensor(args.BATCH_SIZE).random_(
-        args.NUM_CLASSES).to(args.device)
+        args.NUM_CLASSES).to(args.DEVICE)
     criterion = nn.CrossEntropyLoss()
     benchmark = {}
     for model_type in MODEL_LIST.keys():
@@ -72,20 +75,20 @@ def train(type='single'):
             if args.NUM_GPU > 1:
                 model = nn.DataParallel(model, device_ids=range(args.NUM_GPU))
             model = getattr(model, type)()
-            model = model.to(args.device)
+            model = model.to(args.DEVICE)
             durations = []
             print('Benchmarking Training {} precision type {} '.format(
                 type, model_name))
             for step, img in enumerate(rand_loader):
                 img = getattr(img, type)()
-                if args.device == 'cuda':
+                if args.DEVICE == 'cuda':
                     torch.cuda.synchronize()
                 start = time.time()
                 model.zero_grad()
-                prediction = model(img.to(args.device))
+                prediction = model(img.to(args.DEVICE))
                 loss = criterion(prediction, target)
                 loss.backward()
-                if args.device == 'cuda':
+                if args.DEVICE == 'cuda':
                     torch.cuda.synchronize()
                 end = time.time()
                 if step >= args.WARM_UP:
@@ -107,18 +110,18 @@ def inference(type='float'):
                     model = nn.DataParallel(
                         model, device_ids=range(args.NUM_GPU))
                 model = getattr(model, type)()
-                model = model.to(args.device)
+                model = model.to(args.DEVICE)
                 model.eval()
                 durations = []
                 print('Benchmarking Inference {} precision type {} '.format(
                     type, model_name))
                 for step, img in enumerate(rand_loader):
                     img = getattr(img, type)()
-                    if args.device == 'cuda':
+                    if args.DEVICE == 'cuda':
                         torch.cuda.synchronize()
                     start = time.time()
-                    model(img.to(args.device))
-                    if args.device == 'cuda':
+                    model(img.to(args.DEVICE))
+                    if args.DEVICE == 'cuda':
                         torch.cuda.synchronize()
                     end = time.time()
                     if step >= args.WARM_UP:
@@ -137,11 +140,11 @@ if __name__ == '__main__':
     system_configs = str(platform.uname())
     system_configs = '\n'.join((system_configs, str(psutil.cpu_freq()), 'cpu_count: ' + str(
         psutil.cpu_count()), 'memory_available: ' + str(psutil.virtual_memory().available)))
-    gpu_configs = [torch.cuda.device_count(), torch.version.cuda,
-                   torch.backends.cudnn.version(), torch.cuda.get_device_name(0)]
-    gpu_configs = list(map(str, gpu_configs))
-    temp = ['Number of GPUs on current device : ',
-            'CUDA Version : ', 'Cudnn Version : ', 'Device Name : ']
+    # gpu_configs = [torch.cuda.device_count(), torch.version.cuda,
+    #                torch.backends.cudnn.version(), torch.cuda.get_device_name(0)]
+    # gpu_configs = list(map(str, gpu_configs))
+    # temp = ['Number of GPUs on current device : ',
+    #        'CUDA Version : ', 'Cudnn Version : ', 'Device Name : ']
 
     os.makedirs(folder_name, exist_ok=True)
     now = time.localtime()
@@ -149,17 +152,17 @@ if __name__ == '__main__':
                                                         now.tm_mon, now.tm_mday, now.tm_hour, now.tm_min, now.tm_sec))
     print('benchmark start : ', start_time)
 
-    for idx, value in enumerate(zip(temp, gpu_configs)):
-        gpu_configs[idx] = ''.join(value)
-        print(gpu_configs[idx])
-    print(system_configs)
+    # for idx, value in enumerate(zip(temp, gpu_configs)):
+    #    gpu_configs[idx] = ''.join(value)
+    #    print(gpu_configs[idx])
+    # print(system_configs)
 
     with open(os.path.join(folder_name, "system_info.txt"), "w") as f:
         f.writelines('benchmark start : ' + start_time + '\n')
         f.writelines('system_configs\n\n')
         f.writelines(system_configs)
-        f.writelines('\ngpu_configs\n\n')
-        f.writelines(s + '\n' for s in gpu_configs)
+        # f.writelines('\ngpu_configs\n\n')
+        # f.writelines(s + '\n' for s in gpu_configs)
 
     for precision in precisions:
         train_result = train(precision)
